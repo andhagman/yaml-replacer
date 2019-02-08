@@ -3,7 +3,7 @@ const stdio = require('stdio');
 const { insertYamlValue } = require('./helpers');
 
 const ops = stdio.getopt({
-  'base-file': {
+  'file-path': {
     key: 'b',
     args: 1,
     description: 'The path to the base file',
@@ -15,7 +15,7 @@ const ops = stdio.getopt({
     description: 'The key you want to change value for',
     mandatory: true,
   },
-  'output-value': {
+  value: {
     key: 'v',
     args: 1,
     description: 'The value you want to change the key to',
@@ -24,7 +24,7 @@ const ops = stdio.getopt({
 }, 'yaml-replacer -b path/to/base.yaml -k Foo -v Bar');
 
 try {
-  insertYamlValue(ops['base-file'], ops.key, ops['output-value']);
+  insertYamlValue(ops['file-path'], ops.key, ops.value);
 } catch (err) {
   console.error(err.message);
   process.exit(1);

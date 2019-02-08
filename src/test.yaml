@@ -1,0 +1,279 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: project-onebox-email-service
+Parameters:
+  Stage:
+    Type: String
+    Default: test
+  MemorySize:
+    Type: Number
+  IamClientId:
+    Type: String
+    Description: IAM client id
+  IamClientSecretSecretName:
+    Type: String
+    Description: Name of Secrets Manager secret that contains IAM client secret
+  IamTokenEndpointHost:
+    Type: String
+    Description: Protocol and hostname of OAuth2 token endpoint
+  IamTokenEndpointPath:
+    Type: String
+    Description: Path of OAuth2 token endpoint
+    Default: 512
+  ApiGwAlarmsTemplateURL:
+    Type: String
+    Default: >-
+      https://s3-eu-west-1.amazonaws.com/onebox-substack/apigw-alarms/v1/apigw-alarms.yml
+  AlertsTopicArn:
+    Type: String
+    Default: >-
+      arn:aws:sns:eu-west-1:722053433063:onebox-test-v1-AlertsTopic-1BNJ1947XB620
+  RuleSetName:
+    Type: String
+    Default: email-service-rule-set
+  DomainName:
+    Type: String
+    Default: '@pnmmapi.com'
+  LettersForPartnersApiBaseUrl:
+    Type: String
+  Api2ApiKeySecretName:
+    Type: String
+Globals:
+  Function:
+    Runtime: nodejs8.10
+    MemorySize:
+      Ref: MemorySize
+    Timeout: 5
+Resources:
+  EmailServiceTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: bcc
+          AttributeType: S
+        - AttributeName: from
+          AttributeType: S
+      KeySchema:
+        - AttributeName: bcc
+          KeyType: HASH
+        - AttributeName: from
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+  EmailFromS3Function:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      CodeUri: ../dist/email-from-s3
+      Handler: email-from-s3.handler
+      Timeout: 30
+      Tracing: Active
+      Role:
+        'Fn::GetAtt':
+          - EmailFromS3FunctionRole
+          - Arn
+      Environment:
+        Variables:
+          AWS_XRAY_CONTEXT_MISSING: LOG_ERROR
+          LettersForPartnersApiBaseUrl:
+            Ref: LettersForPartnersApiBaseUrl
+          Api2ApiKeySecretName:
+            Ref: Api2ApiKeySecretName
+          IamClientSecretSecretName:
+            Ref: IamClientSecretSecretName
+          IamTokenEndpointPath:
+            Ref: IamTokenEndpointPath
+          IamTokenEndpointHost:
+            Ref: IamTokenEndpointHost
+          IamClientId:
+            Ref: IamClientId
+          EmailServiceTable:
+            Ref: EmailServiceTable
+      Events:
+        MailCreatedEvent:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: InboundEmailBucket
+            Events: 's3:ObjectCreated:*'
+  EmailFromS3FunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName:
+            'Fn::Sub': '${AWS::StackName}-EmailFromS3FunctionRole'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 'secretsmanager:GetSecretValue'
+                Resource:
+                  - 'Fn::Sub': >-
+                      arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${IamClientSecretSecretName}
+                  - 'Fn::Sub': >-
+                      arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Api2ApiKeySecretName}
+                  - 'Fn::Sub': >-
+                      arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${IamClientSecretSecretName}-*
+                  - 'Fn::Sub': >-
+                      arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Api2ApiKeySecretName}-*
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess'
+  CreateEmailFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      CodeUri: ../dist/email-address-post
+      Handler: email-address-post.handler
+      Tracing: Active
+      Role:
+        'Fn::GetAtt':
+          - CreateEmailFunctionRole
+          - Arn
+      Tags:
+        generalConditionDashboardItems: >-
+          LambdaFunctionErrors LogErrors LambdaThrottles LambdaDuration
+          LambdaInvocations
+        generalConditionDashboard:
+          Ref: Stage
+        serviceLevelDashboardItems: LambdaFunctionErrors LogErrors LambdaThrottles
+        serviceLevelDashboard:
+          Ref: Stage
+      Environment:
+        Variables:
+          RuleSetName:
+            Ref: RuleSetName
+          RuleName:
+            Ref: ReceiptRule
+          Domain:
+            Ref: DomainName
+          EmailServiceTable:
+            Ref: EmailServiceTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /rest/customer/v1/letters/senders/email
+            Method: POST
+            RestApiId:
+              Ref: EmailAddressApi
+  CreateEmailFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ses.amazonaws.com
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName:
+            'Fn::Sub': '${AWS::StackName}-ses-Update'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ses:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:BatchWriteItem'
+                Resource:
+                  - 'Fn::GetAtt':
+                      - EmailServiceTable
+                      - Arn
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess'
+  InboundEmailBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Hello
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: generalConditionDashboardItems
+          Value: S3ObjectCount
+        - Key: generalConditionDashboard
+          Value:
+            Ref: Stage
+  InboundEmailBucketLambdaPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    DependsOn:
+      - InboundEmailBucket
+    Properties:
+      Bucket:
+        Ref: InboundEmailBucket
+      PolicyDocument:
+        Statement:
+          - Sid:
+              'Fn::Sub': '${AWS::StackName}-InboundEmailBucketLambdaPolicy-getObject'
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 's3:GetObject'
+            Resource:
+              - 'Fn::Sub': '${InboundEmailBucket.Arn}/*'
+          - Sid:
+              'Fn::Sub': '${AWS::StackName}-InboundEmailBucketLambdaPolicy-putObject'
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action:
+              - 's3:PutObject'
+            Resource:
+              - 'Fn::Sub': '${InboundEmailBucket.Arn}/*'
+  EmailAddressApi:
+    Type: 'AWS::Serverless::Api'
+    Properties:
+      Name:
+        'Fn::Sub': '${AWS::StackName}'
+      StageName: api
+      Cors:
+        AllowOrigin: '''*'''
+      DefinitionBody: null
+  ApiAlarms:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL:
+        Ref: ApiGwAlarmsTemplateURL
+      Parameters:
+        ApiName:
+          Ref: EmailAddressApi
+        AlertsTopicArn:
+          Ref: AlertsTopicArn
+  ReceiptRule:
+    Type: 'AWS::SES::ReceiptRule'
+    DependsOn:
+      - InboundEmailBucket
+    Properties:
+      RuleSetName:
+        Ref: RuleSetName
+      Rule:
+        Name:
+          'Fn::Join':
+            - ''
+            - 'Fn::Split':
+                - '-'
+                - 'Fn::Sub': '${AWS::StackName}'
+        Enabled: true
+        Actions:
+          - S3Action:
+              BucketName:
+                Ref: InboundEmailBucket
+        Recipients:
+          - 'Fn::Sub': 'default-recipient-to-avoid-catch-all${DomainName}'

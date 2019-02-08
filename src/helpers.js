@@ -1,16 +1,16 @@
 const yaml = require('js-yaml');
 const fs = require('fs');
 
-const writeToYaml = (path, data) => fs.writeFileSync(path, yaml.safeDump(data));
+const writeToYaml = (filePath, data) => fs.writeFileSync(filePath, yaml.safeDump(data));
 
 
-const insertYamlValue = (basePath, key, value) => {
+const insertYamlValue = (filePath, key, value) => {
 
-    const data = yaml.safeLoad(fs.readFileSync(basePath, 'utf8'));
+    const data = yaml.safeLoad(fs.readFileSync(filePath, 'utf8'));
 
     replaceKeys(data, key, value);
 
-    writeToYaml(basePath, data)
+    writeToYaml(filePath, data)
 }
 
 const replaceKeys = (obj, key, value) => {
