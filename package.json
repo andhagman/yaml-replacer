@@ -1,0 +1,18 @@
+{
+  "name": "yaml-replacer",
+  "version": "0.0.1",
+  "description": "Simple CLI to replace an attribute in yaml",
+  "main": "./src/cli.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "js-yaml": "^3.12.0",
+    "stdio": "^0.2.7"
+  },
+  "bin": {
+    "yaml-replacer": "./src/cli.js"
+  }
+}
