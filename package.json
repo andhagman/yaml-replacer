@@ -1,6 +1,6 @@
 {
   "name": "yaml-replacer",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Simple CLI to replace an attribute in yaml",
   "main": "./src/cli.js",
   "author": "Andreas Hagman",
@@ -14,7 +14,7 @@
     "type": "git",
     "url": "git+https://github.com/andhagman/yaml-replacer.git"
   },
-  "homepage": "https://github.com/paulmillr/chokidar",
+  "homepage": "https://github.com/andhagman/yaml-replacer",
   "license": "ISC",
   "dependencies": {
     "js-yaml": "^3.12.0",
