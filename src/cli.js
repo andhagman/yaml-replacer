@@ -12,14 +12,14 @@ const ops = stdio.getopt({
   key: {
     key: 'k',
     args: 1,
-    description: 'The key you want to change value for',
+    description: 'The key(s) you want to change value for',
     mandatory: true,
   },
   value: {
     key: 'v',
     args: 1,
-    description: 'The value you want to change the key to',
-    mandatory: true,
+    description: 'The value you want to change the key(s) to. (If not defined all keys will instead be removed)',
+    mandatory: false,
   },
 }, 'yaml-replacer -b path/to/base.yaml -k Foo -v Bar');
 

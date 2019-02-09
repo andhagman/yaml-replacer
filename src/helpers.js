@@ -3,7 +3,6 @@ const fs = require('fs');
 
 const writeToYaml = (filePath, data) => fs.writeFileSync(filePath, yaml.safeDump(data));
 
-
 const insertYamlValue = (filePath, key, value) => {
 
     const data = yaml.safeLoad(fs.readFileSync(filePath, 'utf8'));
@@ -24,7 +23,11 @@ const replaceKeys = (obj, key, value) => {
                 replaceKeys(obj[ele], key, value);
             } else if (typeof obj[ele] === 'string') {
                 if (ele === key) {
-                    obj[ele] = value;
+                    if (value) {
+                        obj[ele] = value;
+                    } else {
+                        delete obj[ele];
+                    }
                 }
             }
         }
@@ -33,5 +36,6 @@ const replaceKeys = (obj, key, value) => {
 
 
 module.exports = {
-    insertYamlValue
+    insertYamlValue,
+    replaceKeys
 }
